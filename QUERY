@@ -1,0 +1,102 @@
+WITH UniqueMCT AS (
+    SELECT DISTINCT 
+        CatEAN.MCT,
+        CatEAN.MODELO,
+        CatEAN.COLOR,
+        CatEAN.TALLA,
+        
+        CatmodVisual.Collection,
+        CatmodVisual.`Cat_1`,
+        CatmodVisual.`Cat_2`,
+        CatmodVisual.Linea
+    FROM 
+        `ivonne-399623.IVONNE.CatEAN` AS CatEAN
+    JOIN 
+        `ivonne-399623.IVONNE.CatmodVisual` AS CatmodVisual
+    ON 
+        CatEAN.MODELO = CatmodVisual.Modelo
+),
+InventarioSum AS (
+    SELECT 
+        UniqueMCT.MCT,
+        UniqueMCT.MODELO,
+        UniqueMCT.COLOR,
+        UniqueMCT.TALLA,
+        
+        UniqueMCT.Collection,
+        UniqueMCT.`Cat_1`,
+        UniqueMCT.`Cat_2`,
+        UniqueMCT.Linea,
+        Inventario.Warehouse AS Tienda,
+        SUM(Inventario.ATShip) AS Total_ATShip
+    FROM 
+        `ivonne-399623.IVONNE.Inventario` AS Inventario
+    JOIN 
+        UniqueMCT 
+    ON 
+        Inventario.MCT = UniqueMCT.MCT
+    WHERE
+        Inventario.Warehouse NOT IN ('PTCORP', 'GRANJAS', 'LERMA', 'PUNTANORTE', 'OUTLETPUEBLA')
+    GROUP BY 
+        UniqueMCT.MCT, UniqueMCT.MODELO, UniqueMCT.COLOR, UniqueMCT.TALLA, 
+        UniqueMCT.Collection, UniqueMCT.`Cat_1`, UniqueMCT.`Cat_2`, UniqueMCT.Linea, Inventario.Warehouse
+),
+VentHistoricaWithMCT AS (
+    SELECT 
+        CONCAT(VentHistorica.Product, VentHistorica.Color, VentHistorica.Talla) AS MCT,
+        UniqueMCT.MODELO,
+        UniqueMCT.COLOR,
+        UniqueMCT.TALLA,
+        
+        UniqueMCT.Collection,
+        UniqueMCT.`Cat_1`,
+        UniqueMCT.`Cat_2`,
+        UniqueMCT.Linea,
+        VentHistorica.Tienda,
+        SUM(VentHistorica.Qty_x_Size) AS Total_Qty_x_Size
+    FROM 
+        `ivonne-399623.IVONNE.Vent_Historica` AS VentHistorica
+    JOIN 
+        UniqueMCT
+    ON 
+        CONCAT(VentHistorica.Product, VentHistorica.Color, VentHistorica.Talla) = UniqueMCT.MCT
+    WHERE 
+        VentHistorica.Fecha_orden > '2026-01-27'
+        AND VentHistorica.Tienda NOT IN ('PTCORP', 'GRANJAS', 'LERMA', 'PUNTANORTE', 'OUTLETPUEBLA')
+    GROUP BY 
+        MCT, UniqueMCT.MODELO, UniqueMCT.COLOR, UniqueMCT.TALLA, 
+        UniqueMCT.Collection, UniqueMCT.`Cat_1`, UniqueMCT.`Cat_2`, UniqueMCT.Linea, VentHistorica.Tienda
+)
+SELECT 
+    COALESCE(InventarioSum.MCT, VentHistoricaWithMCT.MCT) AS MCT,
+    COALESCE(InventarioSum.MODELO, VentHistoricaWithMCT.MODELO) AS MODELO,
+    COALESCE(InventarioSum.COLOR, VentHistoricaWithMCT.COLOR) AS COLOR,
+    COALESCE(InventarioSum.TALLA, VentHistoricaWithMCT.TALLA) AS TALLA,
+    
+    COALESCE(InventarioSum.`Cat_1`, VentHistoricaWithMCT.`Cat_1`) AS `Cat_1`,
+    COALESCE(InventarioSum.`Cat_2`, VentHistoricaWithMCT.`Cat_2`) AS `Cat_2`,
+    COALESCE(InventarioSum.Linea, VentHistoricaWithMCT.Linea) AS Linea,
+    COALESCE(InventarioSum.Collection, VentHistoricaWithMCT.Collection) AS Collection,
+    COALESCE(InventarioSum.Tienda, VentHistoricaWithMCT.Tienda) AS Tienda,
+    SUM(COALESCE(InventarioSum.Total_ATShip, 0)) AS Total_ATShip,
+    SUM(COALESCE(VentHistoricaWithMCT.Total_Qty_x_Size, 0)) AS Total_Qty_x_Size,
+    SUM(COALESCE(InventarioSum.Total_ATShip, 0) + COALESCE(VentHistoricaWithMCT.Total_Qty_x_Size, 0)) AS compra,
+    CatPrimerVenta.FechaMin_POS,
+    CatPrimerVenta.FechaMax_POS
+FROM 
+    InventarioSum
+FULL OUTER JOIN 
+    VentHistoricaWithMCT
+ON 
+    InventarioSum.MCT = VentHistoricaWithMCT.MCT
+    AND InventarioSum.Tienda = VentHistoricaWithMCT.Tienda
+LEFT JOIN
+    `ivonne-399623.IVONNE.CatPrimerVenta` AS CatPrimerVenta
+ON
+    CAST(COALESCE(InventarioSum.MODELO, VentHistoricaWithMCT.MODELO) AS INT64) = CatPrimerVenta.Product
+GROUP BY 
+    MCT, MODELO, COLOR, TALLA, `Cat_1`, `Cat_2`, Linea, Collection, Tienda, 
+    CatPrimerVenta.FechaMin_POS, CatPrimerVenta.FechaMax_POS
+ORDER BY 
+    Collection DESC
+LIMIT 100;
