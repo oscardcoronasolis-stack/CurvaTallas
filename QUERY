@@ -70,6 +70,7 @@ VentHistoricaWithMCT AS (
 SELECT 
     COALESCE(InventarioSum.MCT, VentHistoricaWithMCT.MCT) AS MCT,
     COALESCE(InventarioSum.MODELO, VentHistoricaWithMCT.MODELO) AS MODELO,
+    Pared2026._Temp,
     COALESCE(InventarioSum.COLOR, VentHistoricaWithMCT.COLOR) AS COLOR,
     COALESCE(InventarioSum.TALLA, VentHistoricaWithMCT.TALLA) AS TALLA,
     
@@ -94,8 +95,14 @@ LEFT JOIN
     `ivonne-399623.IVONNE.CatPrimerVenta` AS CatPrimerVenta
 ON
     CAST(COALESCE(InventarioSum.MODELO, VentHistoricaWithMCT.MODELO) AS INT64) = CatPrimerVenta.Product
+LEFT JOIN
+    `ivonne-399623.IVONNE.Pared2026` AS Pared2026
+ON
+    CAST(COALESCE(InventarioSum.MODELO, VentHistoricaWithMCT.MODELO) AS INT64) = Pared2026.Pared_Modelo
+WHERE
+    Pared2026._Temp = 'PV-26'
 GROUP BY 
-    MCT, MODELO, COLOR, TALLA, `Cat_1`, `Cat_2`, Linea, Collection, Tienda, 
+    MCT, MODELO, Pared2026._Temp, COLOR, TALLA, `Cat_1`, `Cat_2`, Linea, Collection, Tienda, 
     CatPrimerVenta.FechaMin_POS, CatPrimerVenta.FechaMax_POS
 ORDER BY 
     Collection DESC
